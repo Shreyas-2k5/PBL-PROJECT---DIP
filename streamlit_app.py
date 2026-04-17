@@ -84,6 +84,8 @@ if uploaded_file is not None:
     # -------- VIDEO --------
     elif uploaded_file.type == "video/mp4":
 
+        import os
+
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_file.read())
 
@@ -92,25 +94,31 @@ if uploaded_file is not None:
 
         if st.button("🚀 Process Video"):
 
-            output_path = "outputs/output.mp4"
+            os.makedirs("app/outputs/videos", exist_ok=True)
 
-            process_video(tfile.name, output_path)
+            output_path = "app/outputs/videos/output.mp4"
 
-            st.success("Processing Complete!")
+            try:
+                process_video(tfile.name, output_path)
 
-            col1, col2 = st.columns(2)
+                st.success("Processing Complete!")
 
-            with col1:
-                st.subheader("Original")
-                st.video(tfile.name)
+                col1, col2 = st.columns(2)
 
-            with col2:
-                st.subheader("Enhanced")
-                st.video(output_path)
+                with col1:
+                    st.subheader("Original")
+                    st.video(tfile.name)
 
-            with open(output_path, "rb") as f:
-                st.download_button(
-                    "⬇ Download Video",
-                    f,
-                    file_name="enhanced.mp4"
-                )
+                with col2:
+                    st.subheader("Enhanced")
+                    st.video(output_path)
+
+                with open(output_path, "rb") as f:
+                    st.download_button(
+                        "⬇ Download Video",
+                        f,
+                        file_name="enhanced.mp4"
+                    )
+
+            except Exception as e:
+                st.error(f"Error: {e}")

@@ -1,4 +1,5 @@
 import cv2
+import os
 
 from app.processing.face_detection import detect_faces
 from app.processing.skin_segmentation import get_skin_mask
@@ -6,11 +7,31 @@ from app.processing.noise_refinement import refine_mask
 from app.processing.enhancement import enhance_skin
 
 
-def process_video(video_path):
+def process_video(video_path, output_path="app/outputs/videos/output.mp4"):
+
+    # ✅ Ensure output folder exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
     cap = cv2.VideoCapture(video_path)
+
     if not cap.isOpened():
-        print("❌ Error: Could not open video.")
-        return
+        raise ValueError("❌ Error: Could not open video.")
+
+    # Get video properties
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    if fps == 0:
+        fps = 20  # fallback
+
+    # ✅ Use stable codec
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    if not out.isOpened():
+        raise ValueError("❌ Error initializing video writer")
 
     while True:
         ret, frame = cap.read()
@@ -18,7 +39,6 @@ def process_video(video_path):
             break
 
         faces = detect_faces(frame)
-
         final_frame = frame.copy()
 
         for (x, y, w, h) in faces:
@@ -31,11 +51,10 @@ def process_video(video_path):
 
             final_frame[y:y+h, x:x+w] = enhanced_face
 
-        cv2.imshow("Original", frame)
-        cv2.imshow("Processed", final_frame)
-
-        if cv2.waitKey(1) & 0xFF == 27:
-            break
+        # ✅ Write processed frame
+        out.write(final_frame)
 
     cap.release()
-    cv2.destroyAllWindows()
+    out.release()
+
+    return output_path
