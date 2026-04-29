@@ -7,10 +7,15 @@ from app.processing.noise_refinement import refine_mask
 from app.processing.enhancement import enhance_skin
 
 
-def process_video(video_path,
-                  output_path="app/outputs/videos/output.mp4"):
+def process_video(
+    video_path,
+    output_path="app/outputs/videos/output.mp4",
+    brightness=1.0,
+    smoothness=3,
+    mode="Natural",
+    
+):
 
-    # Create output folder if missing
     os.makedirs(
         os.path.dirname(output_path),
         exist_ok=True
@@ -19,11 +24,8 @@ def process_video(video_path,
     cap = cv2.VideoCapture(video_path)
 
     if not cap.isOpened():
-        raise ValueError(
-            "Could not open video."
-        )
+        raise ValueError("Could not open video")
 
-    # Video properties
     width = int(
         cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     )
@@ -32,27 +34,24 @@ def process_video(video_path,
         cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     )
 
-    fps = cap.get(
-        cv2.CAP_PROP_FPS
-    )
+    fps = cap.get(cv2.CAP_PROP_FPS)
 
     if fps == 0:
         fps = 20
 
-    # -------- PROCESS ONLY 10 FPS ----------
-    target_fps = 10
+    total_frames = int(
+        cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    )
 
+    # Process fewer heavy frames
+    target_fps = 20
     frame_interval = max(
         int(fps / target_fps),
         1
     )
-    # ---------------------------------------
 
-
-    # Stable codec
-    fourcc = cv2.VideoWriter_fourcc(
-        *'mp4v'
-    )
+    # safer codec (keep mp4v first)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
     out = cv2.VideoWriter(
         output_path,
@@ -63,22 +62,28 @@ def process_video(video_path,
 
     if not out.isOpened():
         raise ValueError(
-            "Error initializing video writer"
+            "VideoWriter failed to open"
         )
 
     frame_count = 0
+    previous_faces = []
 
     while True:
 
         ret, frame = cap.read()
 
         if not ret:
-            print("Finished video.")
             break
 
         frame_count += 1
 
-        # Skip frames to process only 10 FPS
+        # Progress bar callback
+        if progress_callback and total_frames > 0:
+            progress_callback(
+                frame_count / total_frames
+            )
+
+        # Skip heavy processing
         if frame_count % frame_interval != 0:
             out.write(frame)
             continue
@@ -87,7 +92,36 @@ def process_video(video_path,
             f"Processing frame {frame_count}"
         )
 
-        faces = detect_faces(frame)
+        # Resize for faster face detection
+        small = cv2.resize(
+            frame,
+            (640, 360)
+        )
+
+        # Detect every few processed frames
+        if frame_count % (frame_interval * 5) == 0:
+
+            small_faces = detect_faces(
+                small
+            )
+
+            previous_faces = []
+
+            sx = width / 640
+            sy = height / 360
+
+            for (x, y, w, h) in small_faces:
+
+                previous_faces.append(
+                    (
+                        int(x * sx),
+                        int(y * sy),
+                        int(w * sx),
+                        int(h * sy)
+                    )
+                )
+
+        faces = previous_faces
 
         final_frame = frame.copy()
 
@@ -119,12 +153,7 @@ def process_video(video_path,
                 x:x+w
             ] = enhanced_face
 
-
-        # Write processed frame
-        out.write(
-            final_frame
-        )
-
+        out.write(final_frame)
 
     cap.release()
     out.release()
