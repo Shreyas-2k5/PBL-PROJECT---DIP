@@ -164,7 +164,7 @@ if uploaded_file is not None:
                     brightness=brightness,
                     smoothness=smoothness,
                     mode=mode,
-                    progress_callback=update_progress
+                    
                 )
 
                 status_text.text(
