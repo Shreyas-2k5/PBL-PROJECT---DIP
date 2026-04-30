@@ -1,6 +1,11 @@
-from fastapi import FastAPI
 import cv2
 import numpy as np
+from fastapi import FastAPI
+
+from app.processing.skin_segmentation import get_skin_mask
+from app.processing.noise_refinement import refine_mask
+from app.processing.enhancement import enhance_skin
+
 
 app = FastAPI(title="DIP Skin Processing API")
 
@@ -11,53 +16,30 @@ def test():
     return {"message": "working"}
 
 
-# ------------------ SKIN MASK ------------------
-def get_skin_mask(image):
-    ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
-
-    lower = np.array([0, 133, 77], dtype=np.uint8)
-    upper = np.array([255, 173, 127], dtype=np.uint8)
-
-    mask = cv2.inRange(ycrcb, lower, upper)
-
-    # Noise removal
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-    # Slight blur (reduced for better edges)
-    mask = cv2.GaussianBlur(mask, (3, 3), 0)
-
-    return mask
-
-
-# ------------------ ENHANCEMENT ------------------
-def enhance_skin(image, mask, brightness=1.0, smoothness=3, mode="Natural"):
-    # Safe brightness scaling
-    img = np.clip(image.astype(np.float32) * brightness, 0, 255)
-
-    # Tone adjustment
-    if mode == "Warm":
-        img[:, :, 2] *= 1.1
-    elif mode == "Bright":
-        img *= 1.2
-
-    # Smooth skin
-    k = max(1, smoothness * 2 + 1)
-    smooth = cv2.GaussianBlur(img, (k, k), 0)
-
-    # Normalize mask properly
-    mask = mask.astype(np.float32) / 255.0
-    mask_3 = cv2.merge([mask, mask, mask])
-
-    result = img * (1 - mask_3) + smooth * mask_3
-
-    return np.clip(result, 0, 255).astype(np.uint8)
-
-
 # ------------------ IMAGE PIPELINE ------------------
-def process_image(image, brightness=1.0, smoothness=3, mode="Natural"):
+def process_image(
+    image,
+    brightness=0,
+    exposure=1.0,
+    saturation=0,
+    smoothness=5,
+    contrast=1.0,
+    even_tone_strength=0.0
+):
     mask = get_skin_mask(image)
-    output = enhance_skin(image, mask, brightness, smoothness, mode)
+    mask = refine_mask(mask)
+
+    output = enhance_skin(
+        image,
+        mask,
+        brightness=brightness,
+        exposure=exposure,
+        saturation=saturation,
+        smoothness=smoothness,
+        contrast=contrast,
+        even_tone_strength=even_tone_strength
+    )
+
     return output, mask
 
 
@@ -65,16 +47,18 @@ def process_image(image, brightness=1.0, smoothness=3, mode="Natural"):
 def process_video(
     input_path,
     output_path,
-    brightness=1.0,
-    smoothness=3,
-    mode="Natural"
+    brightness=0,
+    exposure=1.0,
+    saturation=0,
+    smoothness=5,
+    contrast=1.0,
+    even_tone_strength=0.0
 ):
     cap = cv2.VideoCapture(input_path)
 
     if not cap.isOpened():
         raise ValueError("Error opening video file")
 
-    # FPS safety
     fps = cap.get(cv2.CAP_PROP_FPS)
     if not fps or fps != fps:
         fps = 24
@@ -96,8 +80,11 @@ def process_video(
         processed_frame, _ = process_image(
             frame,
             brightness=brightness,
+            exposure=exposure,
+            saturation=saturation,
             smoothness=smoothness,
-            mode=mode
+            contrast=contrast,
+            even_tone_strength=even_tone_strength
         )
 
         out.write(processed_frame)
@@ -106,3 +93,4 @@ def process_video(
     out.release()
 
     return output_path
+    

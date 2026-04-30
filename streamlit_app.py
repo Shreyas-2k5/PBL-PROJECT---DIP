@@ -3,8 +3,30 @@ import cv2
 import numpy as np
 import tempfile
 import os
+import imageio
 
 from app.main import process_image, process_video
+
+
+# ---------------- PURE PYTHON VIDEO CONVERTER ----------------
+def convert_video_py(input_path, output_path):
+    reader = imageio.get_reader(input_path)
+
+    try:
+        fps = reader.get_meta_data().get('fps', 20)
+    except:
+        fps = 20
+
+    writer = imageio.get_writer(
+        output_path,
+        fps=fps,
+        codec='libx264'
+    )
+
+    for frame in reader:
+        writer.append_data(frame)
+
+    writer.close()
 
 
 # ---------------- PAGE CONFIG ----------------
@@ -35,27 +57,17 @@ st.markdown(
 )
 
 
-# ---------------- SIDEBAR ----------------
+# ---------------- SIDEBAR (UPDATED CONTROLS) ----------------
 st.sidebar.header("🎨 Enhancement Controls")
 
-brightness = st.sidebar.slider(
-    "Brightness",
-    0.5,
-    2.0,
-    1.2
-)
+brightness = st.sidebar.slider("Brightness", -50, 50, 10)
+exposure = st.sidebar.slider("Exposure", 0.8, 1.5, 1.1)
+saturation = st.sidebar.slider("Saturation", -30, 50, 20)
+smoothness = st.sidebar.slider("Smoothness", 1, 10, 5)
+contrast = st.sidebar.slider("Contrast", 0.8, 1.5, 1.2)
+even_tone = st.sidebar.slider("Even Skin Tone", 0.0, 0.7, 0.3)
 
-smoothness = st.sidebar.slider(
-    "Smoothness",
-    0,
-    10,
-    3
-)
-
-mode = st.sidebar.selectbox(
-    "Enhancement Mode",
-    ["Natural", "Warm", "Bright"]
-)
+show_mask = st.sidebar.checkbox("Show Skin Mask", value=True)
 
 
 # ---------------- FILE UPLOAD ----------------
@@ -82,11 +94,15 @@ if uploaded_file is not None:
 
         image = cv2.imdecode(file_bytes, 1)
 
+        # 🔥 UPDATED FUNCTION CALL
         output, mask = process_image(
             image,
             brightness=brightness,
+            exposure=exposure,
+            saturation=saturation,
             smoothness=smoothness,
-            mode=mode
+            contrast=contrast,
+            even_tone_strength=even_tone
         )
 
         st.subheader("🖼 Before vs After")
@@ -101,8 +117,9 @@ if uploaded_file is not None:
             st.markdown("### Enhanced")
             st.image(output, channels="BGR")
 
-        st.subheader("🧠 Skin Mask")
-        st.image(mask, clamp=True)
+        if show_mask:
+            st.subheader("🧠 Skin Mask")
+            st.image(mask, clamp=True)
 
         st.download_button(
             "⬇ Download Enhanced Image",
@@ -110,7 +127,6 @@ if uploaded_file is not None:
             file_name="enhanced.png",
             mime="image/png"
         )
-
 
     # ==============================================
     # VIDEO
@@ -120,51 +136,39 @@ if uploaded_file is not None:
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_file.read())
 
-        # Initial preview
-        
         if st.button("🚀 Process Video"):
 
-            os.makedirs(
-                "app/outputs/videos",
-                exist_ok=True
-            )
+            os.makedirs("app/outputs/videos", exist_ok=True)
 
-            output_path = "app/outputs/videos/output.mp4"
+            raw_output = "app/outputs/videos/raw.mp4"
+            final_output = "app/outputs/videos/output.mp4"
 
             try:
-
-                # -------- Progress Bar --------
                 progress_bar = st.progress(0)
                 status_text = st.empty()
 
                 def update_progress(value):
                     progress_bar.progress(value)
-                    status_text.text(
-                        f"Processing: {int(value*100)}%"
-                    )
+                    status_text.text(f"Processing: {int(value*100)}%")
 
-                # -------- Process Video --------
+                # 🔥 UPDATED FUNCTION CALL
                 process_video(
                     tfile.name,
-                    output_path,
+                    raw_output,
                     brightness=brightness,
+                    exposure=exposure,
+                    saturation=saturation,
                     smoothness=smoothness,
-                    mode=mode,
-                    
+                    contrast=contrast,
+                    even_tone_strength=even_tone
                 )
 
-                status_text.text(
-                    "Processing Complete ✅"
-                )
+                convert_video_py(raw_output, final_output)
 
-                st.success(
-                    "Video enhancement complete!"
-                )
+                status_text.text("Processing Complete ✅")
+                st.success("Video enhancement complete!")
 
-                # -------- Before / After --------
-                st.subheader(
-                    "🎬 Before vs After Comparison"
-                )
+                st.subheader("🎬 Before vs After Comparison")
 
                 col1, col2 = st.columns(2)
 
@@ -175,11 +179,10 @@ if uploaded_file is not None:
 
                 with col2:
                     st.markdown("### Enhanced")
-                    with open(output_path, "rb") as v:
+                    with open(final_output, "rb") as v:
                         st.video(v.read())
 
-                # -------- Download --------
-                with open(output_path, "rb") as f:
+                with open(final_output, "rb") as f:
                     st.download_button(
                         "⬇ Download Enhanced Video",
                         data=f,
@@ -187,6 +190,5 @@ if uploaded_file is not None:
                     )
 
             except Exception as e:
-                st.error(
-                    f"Error processing video: {e}"
-                )
+                st.error(f"Error processing video: {e}")
+                
