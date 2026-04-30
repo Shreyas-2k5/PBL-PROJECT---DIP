@@ -121,21 +121,7 @@ if uploaded_file is not None:
         tfile.write(uploaded_file.read())
 
         # Initial preview
-        st.subheader("🎥 Video Preview")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("### Before")
-            with open(tfile.name, "rb") as v:
-                st.video(v.read())
-
-        with col2:
-            st.markdown("### After")
-            st.info(
-                "Enhanced preview will appear after processing."
-            )
-
+        
         if st.button("🚀 Process Video"):
 
             os.makedirs(

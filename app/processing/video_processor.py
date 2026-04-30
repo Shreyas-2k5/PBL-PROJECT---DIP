@@ -5,6 +5,7 @@ from app.processing.face_detection import detect_faces
 from app.processing.skin_segmentation import get_skin_mask
 from app.processing.noise_refinement import refine_mask
 from app.processing.enhancement import enhance_skin
+from app.processing.histogram_matching import match_to_reference
 
 
 def process_video(
@@ -13,6 +14,7 @@ def process_video(
     brightness=1.0,
     smoothness=3,
     mode="Natural",
+    progress_callback=None,
    
 ):
 
